@@ -6,6 +6,7 @@ import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
+import Message from 'primevue/message'
 import { useImpositionStore, type Proof } from '../stores/imposition'
 
 const store = useImpositionStore()
@@ -22,9 +23,13 @@ function save() {
 <template>
   <section class="page">
     <div class="page-head">
-      <div><p class="eyebrow">PROOFING / 打样审批</p><h1>打样轮次与色彩反馈</h1><p class="muted">每轮记录样张、色差、修正说明与负责人决定，修改后生成新拼版版本。</p></div>
+      <div><p class="eyebrow">PROOFING / 打样审批</p><h1>打样轮次与色彩反馈</h1><p class="muted">每轮记录样张、色差、修正说明与负责人决定；打样退回会立即失效当前锁定版本，导出任务回到待生成。</p></div>
       <Button label="新建打样轮次" icon="pi pi-plus" @click="store.createProof" />
     </div>
+
+    <Message v-if="!store.currentVersionId" severity="warn" :closable="false" class="mb-3">
+      当前为未锁定草稿：打样结论随草稿保存，锁定拼版版本后才作为交付依据。
+    </Message>
 
     <div class="proof-layout">
       <section class="panel">
@@ -45,7 +50,7 @@ function save() {
             <div class="print-sample"><span>P1 / P8</span><strong>潮汐来信</strong><i>数字样张色靶</i></div>
             <div>
               <strong>{{ sampleFile }}</strong>
-              <p>样张文件已关联当前拼版版本 {{ store.revision }}，包含 P1、P3、P7、P8 重点页面。</p>
+              <p>样张文件已关联当前拼版版本 {{ store.currentVersionId ?? '草稿未锁定' }}，包含 P1、P3、P7、P8 重点页面。</p>
               <label class="file-button"><i class="pi pi-upload" /> 替换样张照片<input type="file" accept="image/*,.pdf,.tif" style="display:none" @change="sampleFile = ($event.target as HTMLInputElement).files?.[0]?.name ?? sampleFile" /></label>
             </div>
           </div>
@@ -77,6 +82,7 @@ function save() {
 </template>
 
 <style scoped>
+.mb-3 { margin-bottom: 12px; }
 .proof-layout { display: grid; grid-template-columns: 350px minmax(0,1fr) 300px; gap: 14px; align-items: start; }
 .proof-list { padding: 8px; }
 .proof-list button { display: grid; width: 100%; grid-template-columns: 1fr 58px auto; gap: 8px; align-items: center; padding: 11px; border: 0; border-radius: 7px; text-align: left; background: transparent; cursor: pointer; }

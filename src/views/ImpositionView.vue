@@ -34,8 +34,12 @@ function locate(pageNo?: number) {
   <section class="page">
     <div class="page-head">
       <div><p class="eyebrow">IMPOSITION / 拼版工作区</p><h1>Canvas 版位编排与预检</h1><p class="muted">拖拽页面位置，系统实时检查出血、安全区、重叠和骑马订方向。</p></div>
-      <div class="actions"><Button label="批量校验" icon="pi pi-check-circle" outlined /><Button label="保存拼版版本" icon="pi pi-save" @click="store.revision = `R${Number(store.revision.slice(1)) + 1}`" /></div>
+      <div class="actions"><Button label="批量校验" icon="pi pi-check-circle" outlined /><Button label="锁定拼版版本" icon="pi pi-save" @click="store.lockBaseline" /></div>
     </div>
+
+    <Message v-if="!store.locked" severity="warn" :closable="false" class="mb-3">
+      草稿未锁定：版位改动会导致已锁定版本失效、导出任务回到待生成。锁定后版位与打样结论将留存为交付依据。
+    </Message>
 
     <Message v-if="store.validations.length" severity="warn" :closable="false" class="mb-3">
       当前版本有 {{ store.validations.filter((item) => item.severity === '错误').length }} 个阻断错误和 {{ store.validations.filter((item) => item.severity === '警告').length }} 个警告。

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
 import { useImpositionStore } from './stores/imposition'
 
 const route = useRoute()
 const store = useImpositionStore()
+const toast = useToast()
 const mobileOpen = ref(false)
 const title = computed(() => String(route.meta.title ?? '拼版工作台'))
 const nav = [
@@ -16,10 +19,15 @@ const nav = [
   { to: '/versions', label: '版本对比', icon: 'pi pi-copy' },
   { to: '/exports', label: '导出任务', icon: 'pi pi-download' },
 ]
+
+watch(() => store.notice, (notice) => {
+  if (notice) toast.add({ severity: notice.type === 'info' ? 'info' : notice.type, summary: notice.text, life: 4000 })
+})
 </script>
 
 <template>
   <div class="shell">
+    <Toast position="top-center" />
     <header class="mobile-bar"><Button icon="pi pi-bars" text severity="contrast" @click="mobileOpen = !mobileOpen" /><strong>{{ title }}</strong><Tag :value="store.locked ? '已锁定' : '编辑中'" :severity="store.locked ? 'success' : 'warn'" /></header>
     <aside :class="{ open: mobileOpen }">
       <div class="brand"><div class="brand-mark">拼版</div><div><strong>印刷生产中心</strong><small>《潮汐来信》节目册</small></div></div>
@@ -27,8 +35,8 @@ const nav = [
         <RouterLink v-for="item in nav" :key="item.to" :to="item.to" @click="mobileOpen = false"><i :class="item.icon" />{{ item.label }}</RouterLink>
       </nav>
       <div class="sidebar-status">
-        <div><span :class="{ warn: !store.locked }" />{{ store.locked ? '基线已审批锁定' : `${store.validations.length} 项预检提示` }}</div>
-        <small>版本 {{ store.revision }} · 自动保存草稿</small>
+        <div><span :class="{ warn: !store.locked }" />{{ store.currentVersionId ? `基线 ${store.currentVersionId} 已锁定` : '草稿未锁定 · 不可交付' }}</div>
+        <small>{{ store.locked ? '版位与打样结论已留存' : '版本锁定后才能作为交付依据' }}</small>
       </div>
     </aside>
     <main><RouterView /></main>

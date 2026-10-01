@@ -21,12 +21,12 @@ const pendingProof = computed(() => store.proofs.find((proof) => proof.decision 
       <article class="metric"><span>页面文件</span><strong>{{ store.pages.length }}</strong><small>{{ store.positions.length }} 个已排版位</small></article>
       <article class="metric"><span>预检错误</span><strong class="error">{{ errors }}</strong><small>必须处理后方可锁定</small></article>
       <article class="metric"><span>打样轮次</span><strong>{{ store.proofs.length }}</strong><small>当前 ΔE {{ pendingProof?.deltaE ?? '—' }}</small></article>
-      <article class="metric"><span>待恢复导出</span><strong>{{ store.tasks.filter((task) => task.resumable && task.status !== '已完成').length }}</strong><small>断点可继续</small></article>
+      <article class="metric"><span>待恢复导出</span><strong>{{ store.tasks.filter((task) => task.status === '待生成' || task.status === '已中断').length }}</strong><small>断点可继续</small></article>
     </div>
 
     <div class="overview-grid">
       <section class="panel">
-        <div class="panel-head"><h3>当前拼版任务</h3><Tag :value="store.revision" severity="info" /></div>
+        <div class="panel-head"><h3>当前拼版任务</h3><Tag :value="store.currentVersionId ?? '草稿未锁定'" :severity="store.currentVersionId ? 'info' : 'danger'" /></div>
         <div class="project-card">
           <div>
             <strong>《潮汐来信》上海巡演节目册</strong>
@@ -60,7 +60,7 @@ const pendingProof = computed(() => store.proofs.find((proof) => proof.decision 
           <div v-for="task in store.tasks" :key="task.id">
             <div><span>{{ task.name }}</span><strong>{{ task.progress }}%</strong></div>
             <ProgressBar :value="task.progress" :showValue="false" :style="{ height: '7px' }" />
-            <small>{{ task.status }} · {{ task.updatedAt }}</small>
+            <small>{{ task.status }} · 依据 {{ task.versionLabel }} · {{ task.updatedAt }}</small>
           </div>
         </section>
       </aside>
