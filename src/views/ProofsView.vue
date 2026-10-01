@@ -6,7 +6,9 @@ import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
-import { useImpositionStore, type Proof } from '../stores/imposition'
+import Message from 'primevue/message'
+import { useImpositionStore } from '../stores/imposition'
+import type { Proof } from '../types'
 
 const store = useImpositionStore()
 const active = computed(() => store.proofs.find((proof) => proof.id === store.selectedProof) ?? store.proofs[0])
@@ -14,17 +16,34 @@ const draft = ref<Proof>({ ...active.value })
 watch(active, (value) => (draft.value = { ...value }), { immediate: true })
 const sampleFile = ref('当前使用数字样张 v2_09025.tif')
 
+const frozenProofIds = computed(() => store.activeSnapshot?.approvedProofIds ?? [])
+const rejectInvalidates = computed(() => {
+  if (!store.activeSnapshot || !active.value) return false
+  return frozenProofIds.value.includes(active.value.id)
+})
+
 function save() {
+  const wasApproved = active.value?.decision === '通过'
   store.updateProof(draft.value.id, draft.value)
+  if (wasApproved && draft.value.decision !== '通过') {
+    // 失效提示由全局 notice 统一弹出；这里仅确保列表回到最新
+  }
 }
 </script>
 
 <template>
   <section class="page">
     <div class="page-head">
-      <div><p class="eyebrow">PROOFING / 打样审批</p><h1>打样轮次与色彩反馈</h1><p class="muted">每轮记录样张、色差、修正说明与负责人决定，修改后生成新拼版版本。</p></div>
+      <div><p class="eyebrow">PROOFING / 打样审批</p><h1>打样轮次与色彩反馈</h1><p class="muted">锁定时「通过」结论随版位一起冻结进版本快照；结论被退回会让该版本及其导出任务立即失效。</p></div>
       <Button label="新建打样轮次" icon="pi pi-plus" @click="store.createProof" />
     </div>
+
+    <Message v-if="store.activeSnapshot" severity="warn" :closable="false" class="mb-3">
+      当前审批版本 {{ store.activeSnapshot.versionId }} 已冻结 {{ store.activeSnapshot.approvedProofs.length }} 份通过结论（{{ store.activeSnapshot.approvedProofs.map((p) => p.sample).join('、') || '无' }}）。把其中任一轮改为「退回」，旧导出任务立即失效并回到待生成。
+    </Message>
+    <Message v-else-if="store.legacyUnlocked" severity="secondary" :closable="false" class="mb-3">
+      {{ store.legacyNote }}。
+    </Message>
 
     <div class="proof-layout">
       <section class="panel">
@@ -33,7 +52,7 @@ function save() {
           <button v-for="proof in store.proofs.slice().reverse()" :key="proof.id" :class="{ active: proof.id === store.selectedProof }" @click="store.selectedProof = proof.id">
             <div><strong>第 {{ proof.round }} 轮 · {{ proof.sample }}</strong><small>{{ proof.date }} · {{ proof.owner }}</small></div>
             <span>ΔE {{ proof.deltaE }}</span>
-            <Tag :value="proof.decision" :severity="proof.decision === '通过' ? 'success' : proof.decision === '退回' ? 'danger' : 'warn'" />
+            <Tag :value="frozenProofIds.includes(proof.id) ? `${proof.decision} · 已锁定` : proof.decision" :severity="proof.decision === '通过' ? 'success' : proof.decision === '退回' ? 'danger' : 'warn'" />
           </button>
         </div>
       </section>
@@ -41,11 +60,14 @@ function save() {
       <section class="panel proof-editor">
         <div class="panel-head"><h3>{{ draft.id }} · 第 {{ draft.round }} 轮打样记录</h3><Tag :value="draft.decision" :severity="draft.decision === '通过' ? 'success' : draft.decision === '退回' ? 'danger' : 'warn'" /></div>
         <div v-if="active" class="proof-body">
+          <div v-if="frozenProofIds.includes(active.id)" class="frozen-banner">
+            <i class="pi pi-lock" /> 该「通过」结论已冻结进锁定版本 {{ store.activeSnapshot?.versionId }}。
+          </div>
           <div class="sample-preview">
             <div class="print-sample"><span>P1 / P8</span><strong>潮汐来信</strong><i>数字样张色靶</i></div>
             <div>
               <strong>{{ sampleFile }}</strong>
-              <p>样张文件已关联当前拼版版本 {{ store.revision }}，包含 P1、P3、P7、P8 重点页面。</p>
+              <p>样张文件已关联当前拼版版本 {{ store.versionLabel }}，包含 P1、P3、P7、P8 重点页面。</p>
               <label class="file-button"><i class="pi pi-upload" /> 替换样张照片<input type="file" accept="image/*,.pdf,.tif" style="display:none" @change="sampleFile = ($event.target as HTMLInputElement).files?.[0]?.name ?? sampleFile" /></label>
             </div>
           </div>
@@ -61,6 +83,7 @@ function save() {
             <Select v-model="draft.decision" :options="['待决定','通过','退回']" />
             <Button label="保存打样记录" icon="pi pi-save" @click="save" />
             <Button label="退回修改" icon="pi pi-undo" severity="danger" outlined @click="draft.decision = '退回'; save()" />
+            <Tag v-if="rejectInvalidates" value="退回将令已锁定版本失效" severity="danger" />
           </div>
         </div>
       </section>
@@ -78,6 +101,8 @@ function save() {
 
 <style scoped>
 .proof-layout { display: grid; grid-template-columns: 350px minmax(0,1fr) 300px; gap: 14px; align-items: start; }
+.mb-3 { margin-bottom: 12px; }
+.frozen-banner { display: flex; gap: 8px; align-items: center; margin: 0 18px; padding: 9px 12px; border-radius: 6px; color: #35614d; background: #e9f5ef; font-size: 11px; font-weight: 700; }
 .proof-list { padding: 8px; }
 .proof-list button { display: grid; width: 100%; grid-template-columns: 1fr 58px auto; gap: 8px; align-items: center; padding: 11px; border: 0; border-radius: 7px; text-align: left; background: transparent; cursor: pointer; }
 .proof-list button.active { background: #edf5f4; box-shadow: inset 3px 0 #337b79; }

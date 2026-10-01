@@ -5,10 +5,12 @@ import SelectButton from 'primevue/selectbutton'
 import Slider from 'primevue/slider'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
+import { useToast } from 'primevue/usetoast'
 import ImpositionCanvas from '../components/ImpositionCanvas.vue'
 import { useImpositionStore } from '../stores/imposition'
 
 const store = useImpositionStore()
+const toast = useToast()
 const sideOptions = [
   { label: '正面', value: 'front' },
   { label: '反面', value: 'back' },
@@ -28,24 +30,38 @@ function locate(pageNo?: number) {
     store.side = position.front ? 'front' : 'back'
   }
 }
+
+function saveDraft() {
+  // 草稿自动保存；版本号只在审批锁定时产生，避免把未审批内容当作交付依据
+  toast.add({ severity: 'info', life: 3200, summary: '草稿已保存', detail: '当前为未锁定草稿，审批锁定后才会生成可交付版本。' })
+}
 </script>
 
 <template>
   <section class="page">
     <div class="page-head">
       <div><p class="eyebrow">IMPOSITION / 拼版工作区</p><h1>Canvas 版位编排与预检</h1><p class="muted">拖拽页面位置，系统实时检查出血、安全区、重叠和骑马订方向。</p></div>
-      <div class="actions"><Button label="批量校验" icon="pi pi-check-circle" outlined /><Button label="保存拼版版本" icon="pi pi-save" @click="store.revision = `R${Number(store.revision.slice(1)) + 1}`" /></div>
+      <div class="actions"><Button label="批量校验" icon="pi pi-check-circle" outlined /><Button label="保存草稿" icon="pi pi-save" @click="saveDraft" /></div>
     </div>
 
-    <Message v-if="store.validations.length" severity="warn" :closable="false" class="mb-3">
-      当前版本有 {{ store.validations.filter((item) => item.severity === '错误').length }} 个阻断错误和 {{ store.validations.filter((item) => item.severity === '警告').length }} 个警告。
+    <Message v-if="store.locked" severity="success" :closable="false" class="mb-3">
+      当前锁定版本 {{ store.activeSnapshot?.versionId }}（{{ store.activeSnapshot?.fingerprint }}），版位只读。解锁后一旦改动版位，该版本与其导出任务立即失效。
+    </Message>
+    <Message v-else-if="store.activeSnapshot" severity="warn" :closable="false" class="mb-3">
+      已解锁：版本 {{ store.activeSnapshot.versionId }} 仍是交付依据，改动版位会立即令其失效；若内容未变，可直接重新锁定复用该版本。
+    </Message>
+    <Message v-else-if="store.legacyUnlocked" severity="secondary" :closable="false" class="mb-3">
+      {{ store.legacyNote }}，画布内容可修改，锁定后生成首个版本化交付依据。
+    </Message>
+    <Message v-else-if="store.validations.length" severity="warn" :closable="false" class="mb-3">
+      当前草稿有 {{ store.validations.filter((item) => item.severity === '错误').length }} 个阻断错误和 {{ store.validations.filter((item) => item.severity === '警告').length }} 个警告。
     </Message>
 
     <div class="toolbar panel">
-      <SelectButton v-model="store.side" :options="sideOptions" optionLabel="label" optionValue="value" />
+      <SelectButton v-model="store.side" :options="sideOptions" optionLabel="label" optionValue="value" :disabled="store.locked" />
       <span class="muted">缩放 {{ store.zoom }}%</span>
       <Slider v-model="store.zoom" :min="35" :max="100" :step="5" style="width:150px" />
-      <span class="paper-spec">720 × 1020mm · 出血 3mm · 安全区 5mm · {{ store.locked ? '基线只读' : '编辑中' }}</span>
+      <span class="paper-spec">720 × 1020mm · 出血 3mm · 安全区 5mm · {{ store.locked ? `版本 ${store.activeSnapshot?.versionId} 只读` : store.legacyUnlocked ? '旧稿编辑中 · 无版本号' : '草稿编辑中' }}</span>
       <Button v-if="!store.locked" label="审批锁定" icon="pi pi-lock" size="small" @click="store.lockBaseline" />
       <Button v-else label="解锁修订" icon="pi pi-lock-open" size="small" severity="warn" outlined @click="store.unlock" />
     </div>

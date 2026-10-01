@@ -8,6 +8,12 @@ import { useImpositionStore } from '../stores/imposition'
 const store = useImpositionStore()
 const errors = computed(() => store.validations.filter((item) => item.severity === '错误').length)
 const pendingProof = computed(() => store.proofs.find((proof) => proof.decision === '待决定'))
+const resumableCount = computed(() => store.tasks.filter((task) => task.resumable && task.status !== '已完成' && !task.legacy).length)
+const invalidatedCount = computed(() => store.tasks.filter((task) => task.status === '已失效').length)
+const currentTask = computed(() => {
+  const versionId = store.activeSnapshot?.versionId
+  return store.tasks.find((task) => task.versionId === versionId && task.deliverable) ?? null
+})
 </script>
 
 <template>
@@ -21,12 +27,12 @@ const pendingProof = computed(() => store.proofs.find((proof) => proof.decision 
       <article class="metric"><span>页面文件</span><strong>{{ store.pages.length }}</strong><small>{{ store.positions.length }} 个已排版位</small></article>
       <article class="metric"><span>预检错误</span><strong class="error">{{ errors }}</strong><small>必须处理后方可锁定</small></article>
       <article class="metric"><span>打样轮次</span><strong>{{ store.proofs.length }}</strong><small>当前 ΔE {{ pendingProof?.deltaE ?? '—' }}</small></article>
-      <article class="metric"><span>待恢复导出</span><strong>{{ store.tasks.filter((task) => task.resumable && task.status !== '已完成').length }}</strong><small>断点可继续</small></article>
+      <article class="metric"><span>待恢复导出</span><strong>{{ resumableCount }}</strong><small>{{ invalidatedCount ? `${invalidatedCount} 个已失效待重生` : '按锁定快照续传' }}</small></article>
     </div>
 
     <div class="overview-grid">
       <section class="panel">
-        <div class="panel-head"><h3>当前拼版任务</h3><Tag :value="store.revision" severity="info" /></div>
+        <div class="panel-head"><h3>当前拼版任务</h3><Tag :value="store.versionLabel" :severity="store.activeSnapshot ? 'success' : 'secondary'" /></div>
         <div class="project-card">
           <div>
             <strong>《潮汐来信》上海巡演节目册</strong>
@@ -56,11 +62,20 @@ const pendingProof = computed(() => store.proofs.find((proof) => proof.decision 
           </div>
         </section>
         <section class="panel export-mini">
-          <div class="panel-head"><h3>导出任务</h3></div>
-          <div v-for="task in store.tasks" :key="task.id">
-            <div><span>{{ task.name }}</span><strong>{{ task.progress }}%</strong></div>
-            <ProgressBar :value="task.progress" :showValue="false" :style="{ height: '7px' }" />
-            <small>{{ task.status }} · {{ task.updatedAt }}</small>
+          <div class="panel-head"><h3>导出任务</h3><Button label="查看全部" text size="small" @click="$router.push('/exports')" /></div>
+          <div v-if="currentTask">
+            <div><span>{{ currentTask.name }}<small class="ver">{{ currentTask.versionId }}</small></span><strong>{{ currentTask.progress }}%</strong></div>
+            <ProgressBar :value="currentTask.progress" :showValue="false" :style="{ height: '7px' }" />
+            <small>{{ currentTask.status }} · {{ currentTask.updatedAt }} · {{ currentTask.deliverable ? '可交付' : '仅历史' }}</small>
+          </div>
+          <div v-else class="no-delivery">
+            <i class="pi pi-inbox" />
+            <p>{{ store.deliveryState.text }}</p>
+            <Button v-if="store.activeSnapshot" label="生成交付包" size="small" @click="$router.push('/exports')" />
+          </div>
+          <div v-for="task in store.tasks.filter((t) => t !== currentTask).slice(0, 3)" :key="task.id" class="archived-task">
+            <span>{{ task.name }} <small class="ver">{{ task.versionId ?? '旧稿' }}</small></span>
+            <Tag :value="task.status" :severity="task.status === '已失效' ? 'secondary' : task.status === '已完成' ? 'success' : 'warn'" />
           </div>
         </section>
       </aside>
@@ -90,5 +105,11 @@ aside { display: grid; gap: 14px; }
 .export-mini > div:not(.panel-head) { padding: 11px 16px 4px; }
 .export-mini > div > div { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; }
 .export-mini small { display: block; margin-top: 5px; color: #7d898e; }
+.export-mini .ver { display: inline; margin-left: 6px; color: #3a7d7b; font-family: monospace; font-size: 9px; }
+.no-delivery { display: grid; gap: 8px; padding: 14px 16px !important; color: #718087; font-size: 11px; }
+.no-delivery i { font-size: 18px; color: #a9b6bb; }
+.no-delivery .p-button { justify-self: start; }
+.archived-task { opacity: .8; }
+.archived-task small { font-size: 9px; }
 @media (max-width: 1050px) { .overview-grid { grid-template-columns: 1fr; } }
 </style>

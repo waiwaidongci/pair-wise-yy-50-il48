@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { useImpositionStore } from './stores/imposition'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
+import { useImpositionStore, onStoreNotice } from './stores/imposition'
+import { onServerChange } from './api/exportApi'
 
 const route = useRoute()
 const store = useImpositionStore()
+const toast = useToast()
 const mobileOpen = ref(false)
 const title = computed(() => String(route.meta.title ?? '拼版工作台'))
 const nav = [
@@ -16,10 +20,31 @@ const nav = [
   { to: '/versions', label: '版本对比', icon: 'pi pi-copy' },
   { to: '/exports', label: '导出任务', icon: 'pi pi-download' },
 ]
+
+onMounted(() => {
+  store.refreshTasks().catch(() => {})
+  // 服务端任务变化（跨标签页续传 / 接管）时同步镜像
+  onServerChange(() => store.refreshTasks().catch(() => {}))
+
+  onStoreNotice((notice) => {
+    if (notice.type === 'invalidated') {
+      const what = notice.reason === 'positions' ? '版位发生改动' : '打样被退回'
+      toast.add({
+        severity: 'error',
+        life: 5200,
+        summary: notice.external ? `版本 ${notice.versionId} 已在另一标签页失效` : `版本 ${notice.versionId} 已失效`,
+        detail: `${what}，旧导出任务立即失效并回到待生成，已产出结果仅作历史查看。`,
+      })
+    } else if (notice.type === 'locked' && notice.external) {
+      toast.add({ severity: 'warn', life: 5200, summary: `版本已变化：${notice.versionId}`, detail: '另一个标签页已锁定新版本，本页草稿不能写入旧版本，请刷新后基于新版本继续。' })
+    }
+  })
+})
 </script>
 
 <template>
   <div class="shell">
+    <Toast position="top-right" />
     <header class="mobile-bar"><Button icon="pi pi-bars" text severity="contrast" @click="mobileOpen = !mobileOpen" /><strong>{{ title }}</strong><Tag :value="store.locked ? '已锁定' : '编辑中'" :severity="store.locked ? 'success' : 'warn'" /></header>
     <aside :class="{ open: mobileOpen }">
       <div class="brand"><div class="brand-mark">拼版</div><div><strong>印刷生产中心</strong><small>《潮汐来信》节目册</small></div></div>
@@ -27,8 +52,13 @@ const nav = [
         <RouterLink v-for="item in nav" :key="item.to" :to="item.to" @click="mobileOpen = false"><i :class="item.icon" />{{ item.label }}</RouterLink>
       </nav>
       <div class="sidebar-status">
-        <div><span :class="{ warn: !store.locked }" />{{ store.locked ? '基线已审批锁定' : `${store.validations.length} 项预检提示` }}</div>
-        <small>版本 {{ store.revision }} · 自动保存草稿</small>
+        <div><span :class="{ warn: !store.locked, legacy: store.legacyUnlocked }" />{{
+          store.locked ? '基线已审批锁定' : store.legacyUnlocked ? '旧稿 · 未锁定历史' : `${store.validations.length} 项预检提示`
+        }}</div>
+        <small>版本 {{ store.versionLabel }} · 自动保存草稿</small>
+        <small v-if="store.activeSnapshot && store.activeSnapshot.status !== 'active'" class="archived">
+          {{ store.activeSnapshot.versionId }} 已{{ store.activeSnapshot.status === 'invalidated' ? '失效' : '被新版本取代' }}，仅作历史
+        </small>
       </div>
     </aside>
     <main><RouterView /></main>
@@ -50,7 +80,9 @@ nav a.router-link-active { color: white; background: #3a555d; box-shadow: inset 
 .sidebar-status div { font-size: 11px; font-weight: 700; }
 .sidebar-status span { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #58b38a; }
 .sidebar-status span.warn { background: #d9a04d; }
+.sidebar-status span.legacy { background: #8a969c; }
 .sidebar-status small { display: block; margin-top: 6px; color: #96a9ae; font-size: 9px; }
+.sidebar-status small.archived { color: #d99a8c; }
 main { min-width: 0; margin-left: 244px; }
 .mobile-bar { display: none; }
 @media (max-width: 820px) {

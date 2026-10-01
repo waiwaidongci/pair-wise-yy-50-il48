@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import type { Position, Validation } from '../stores/imposition'
+import type { Position, Validation } from '../types'
 
 const props = defineProps<{
   positions: Position[]
